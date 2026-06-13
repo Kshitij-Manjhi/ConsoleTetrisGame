@@ -5,8 +5,8 @@
 using namespace std;
 
 wstring tetromino[7];
-int nFieldWidth = 12;
-int nFieldHeight = 18;
+int nFieldWidth = 10*2+4;
+int nFieldHeight = 22;
 unsigned char* pField = nullptr;
 
 int nScreenWidth = 120;      // Console Screen Sixe X (columns)
@@ -24,21 +24,27 @@ int Rotate(int px, int py, int r) {
 }
 
 bool DoesPieceFit(int nTetromino, int nRotation, int nPosX, int nPosY) {
-    for (int px = 0; px < 4; px++)
+    for (int px = 0; px < 4; px++) {
         for (int py = 0; py < 4; py++) {
             // Get index into piece
             int pi = Rotate(px, py, nRotation);
 
-            // Get index into field
-            int fi = (nPosY + py) * nFieldWidth + (nPosX + px);
+            // Only care about occupied blocks
+            if (tetromino[nTetromino][pi] != L'X')
+                continue;
 
-            if (nPosX + px >= 0 && nPosX + px < nFieldWidth) {
-                if (nPosY + py >= 0 && nPosY + py < nFieldHeight) {
-                    if (tetromino[nTetromino][pi] == L'X' && pField[fi] != 0)
-                        return false; // fail on first hit
-                }
-            }
+            int fx = nPosX + px * 2;
+            int fy = nPosY + py;
+
+            // If block is outside boundary
+            if (fy >= nFieldHeight || fx < 0 || (fx + 1) >= nFieldWidth)
+                return false;
+
+            // Allowed 0 and 1 field value
+            if (!((pField[fy * nFieldWidth + fx] == 0 || pField[fy * nFieldWidth + fx] == 1) && (pField[fy * nFieldWidth + fx + 1] == 0 || pField[fy * nFieldWidth + fx + 1] == 1)))
+                return false; // bye bye
         }
+    }
 
     return true;
 }
@@ -83,9 +89,37 @@ int main()
 
     pField = new unsigned char[nFieldWidth * nFieldHeight]; // Create play field buffer
 
-    for (int x = 0; x < nFieldWidth; x++)   // Create play field Boundary
-        for (int y = 0; y < nFieldHeight; y++)
-            pField[y * nFieldWidth + x] = (x == 0 || x == nFieldWidth - 1 || y == nFieldHeight - 1) ? 9 : 0;
+    for (int x = 0; x < nFieldWidth; x++) {  // Create play field Boundary
+        for (int y = 0; y < nFieldHeight; y++) {
+            if (x == 0 && !(y == nFieldHeight - 1)) {   // Left Boundary
+                pField[y * nFieldWidth + x] = 5;
+            }
+            else if (x == nFieldWidth - 1 && !(y == nFieldHeight - 1)) { // Right Boundary
+                pField[y * nFieldWidth + x] = 7;
+            }
+            else if ((x == 1 || x == nFieldWidth - 2) && !(y == nFieldHeight - 1)) { // ! Boundary
+                pField[y * nFieldWidth + x] = 6;
+            }
+            else if ((x >= 2 && x <= nFieldWidth - 3) && y == nFieldHeight - 2) {   // * Bottom Boundary
+                pField[y * nFieldWidth + x] = 8;
+            }
+            else if ((x >= 2 && x <= nFieldWidth - 3) && y == nFieldHeight - 1) {   // Bottom Boundary
+                if (x % 2 == 0)
+                    pField[y * nFieldWidth + x] = 9;    // \ Bottom Boundary
+                else
+                    pField[y * nFieldWidth + x] = 10;   // / Bottom Boundary
+            }
+            else if (x % 2 == 1 && x > 1 && x < nFieldWidth - 2 && y <= nFieldHeight - 2) { // 
+                pField[y * nFieldWidth + x] = 1;
+            }
+            else
+            {
+                pField[y * nFieldWidth + x] = 0;
+            }
+            //pField[y * nFieldWidth + x] = (x == 0 || x == nFieldWidth - 1 || y == nFieldHeight - 1) ? 9 : 0;
+
+        }
+    }
 
     wchar_t* screen = new wchar_t[nScreenWidth * nScreenHeight];
 
@@ -95,10 +129,10 @@ int main()
     SetConsoleActiveScreenBuffer(hConsole);
     DWORD dwBytesWritten = 0;
 
-    // GAme Logic Stuff
+    // Game Logic Stuff
     bool bGameOver = false;
 
-    int nCurrentPiece = 1;
+    int nCurrentPiece = 0;
     int nCurrentRotation = 0;
     int nCurrentX = nFieldWidth / 2;
     int nCurrentY = 0;
@@ -125,8 +159,8 @@ int main()
             bKey[k] = (0x8000 & GetAsyncKeyState((unsigned char)("\x27\x25\x28Z"[k]))) != 0;
 
         // GAME LOGIC ===================================
-        nCurrentX += (bKey[0] && DoesPieceFit(nCurrentPiece, nCurrentRotation, nCurrentX + 1, nCurrentY)) ? 1 : 0; // Right key press
-        nCurrentX -= (bKey[1] && DoesPieceFit(nCurrentPiece, nCurrentRotation, nCurrentX - 1, nCurrentY)) ? 1 : 0; // Left key press
+        nCurrentX += (bKey[0] && DoesPieceFit(nCurrentPiece, nCurrentRotation, nCurrentX + 2, nCurrentY)) ? 2 : 0; // Right key press
+        nCurrentX -= (bKey[1] && DoesPieceFit(nCurrentPiece, nCurrentRotation, nCurrentX - 2, nCurrentY)) ? 2 : 0; // Left key press
         nCurrentY += (bKey[2] && DoesPieceFit(nCurrentPiece, nCurrentRotation, nCurrentX, nCurrentY + 1)) ? 1 : 0; // Down key press
 
         if (bKey[3]) {   // Z key press
@@ -144,8 +178,10 @@ int main()
                 // Lock the current piece in the field
                 for (int px = 0; px < 4; px++)
                     for (int py = 0; py < 4; py++)
-                        if (tetromino[nCurrentPiece][Rotate(px, py, nCurrentRotation)] == L'X')
-                            pField[(nCurrentY + py) * nFieldWidth + (nCurrentX + px)] = nCurrentPiece + 1;
+                        if (tetromino[nCurrentPiece][Rotate(px, py, nCurrentRotation)] == L'X') {
+                            pField[(nCurrentY + py) * nFieldWidth + (nCurrentX + px * 2)] = 2;
+                            pField[(nCurrentY + py) * nFieldWidth + (nCurrentX + px * 2 + 1)] = 3;
+                        }
 
                 nPieceCount++;
                 if (nPieceCount % 10 == 0)
@@ -153,15 +189,15 @@ int main()
 
                 // Check have we got any lines
                 for (int py = 0; py < 4; py++)
-                    if (nCurrentY + py < nFieldHeight - 1) {
+                    if (nCurrentY + py < nFieldHeight - 2) {
                         bool bLine = true;
                         for (int px = 1; px < nFieldWidth - 1; px++)
                             bLine &= (pField[(nCurrentY + py) * nFieldWidth + px]) != 0;
 
                         if (bLine) {
                             // Remove Line, set to =
-                            for (int px = 1; px < nFieldWidth - 1; px++)
-                                pField[(nCurrentY + py) * nFieldWidth + px] = 8;
+                            for (int px = 2; px < nFieldWidth - 2; px++)
+                                pField[(nCurrentY + py) * nFieldWidth + px] = 4;
 
                             vLines.push_back(nCurrentY + py);
                         }
@@ -173,7 +209,8 @@ int main()
                 nCurrentX = nFieldWidth / 2;
                 nCurrentY = 0;
                 nCurrentRotation = 0;
-                nCurrentPiece = rand() % 7;
+                nCurrentPiece = 
+                    rand() % 7;
 
                 // if piece does not fit game over!!
                 bGameOver = !DoesPieceFit(nCurrentPiece, nCurrentRotation, nCurrentX, nCurrentY);
@@ -187,13 +224,15 @@ int main()
         // Draw Field
         for (int x = 0; x < nFieldWidth; x++)
             for (int y = 0; y < nFieldHeight; y++)
-                screen[(y + nOffset) * nScreenWidth + (x + nOffset)] = L" ABCDEFG=#"[pField[y * nFieldWidth + x]];
+                screen[(y + nOffset) * nScreenWidth + (x + nOffset)] = L" .[]=<!>*\\/"[pField[y * nFieldWidth + x]];
 
         // Draw Current Piece
         for (int px = 0; px < 4; px++)
             for (int py = 0; py < 4; py++)
-                if (tetromino[nCurrentPiece][Rotate(px, py, nCurrentRotation)] == L'X')
-                    screen[(nCurrentY + py + nOffset) * nScreenWidth + (nCurrentX + px + nOffset)] = nCurrentPiece + 65;
+                if (tetromino[nCurrentPiece][Rotate(px, py, nCurrentRotation)] == L'X') {
+                    screen[(nCurrentY + py + nOffset) * nScreenWidth + (nCurrentX + px * 2 + nOffset)] = L'[';
+                    screen[(nCurrentY + py + nOffset) * nScreenWidth + (nCurrentX + 1 + px * 2 + nOffset)] = L']';
+                }
 
         // Draw Score
         swprintf_s(&screen[2 * nScreenWidth + nFieldWidth + 6], 16, L"SCORE: %8d", nScore);
@@ -204,10 +243,13 @@ int main()
             this_thread::sleep_for(400ms);  // Delay a bit
 
             for (auto &v : vLines)
-                for (int px = 1; px < nFieldWidth - 1; px++) {
+                for (int px = 2; px < nFieldWidth - 2; px++) {
                     for (int py = v; py > 0; py--)
                         pField[py * nFieldWidth + px] = pField[(py - 1) * nFieldWidth + px];
-                    pField[px] = 0;
+                    if (px%2)
+                        pField[px] = 1;
+                    else
+                        pField[px] = 0;
                 }
             vLines.clear();
 
